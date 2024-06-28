@@ -25,25 +25,39 @@ st.markdown("<h3 style='text-align: center; color: white;'>Built by <a href='htt
 
 uploaded_file = st.sidebar.file_uploader("Upload your Data", type="csv")
 
-if uploaded_file :
-   #use tempfile because CSVLoader only accepts a file_path
+if uploaded_file:
+    # Use tempfile because CSVLoader only accepts a file_path
     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
         tmp_file.write(uploaded_file.getvalue())
         tmp_file_path = tmp_file.name
 
-    loader = CSVLoader(file_path=tmp_file_path, encoding="utf-8", csv_args={
-                'delimiter': ','})
+    loader = CSVLoader(file_path=tmp_file_path, encoding="utf-8", csv_args={'delimiter': ','})
     data = loader.load()
-    #st.json(data)
-    embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2',
-                                       model_kwargs={'device': 'cpu'})
-
-    db = FAISS.from_documents(data, embeddings)
-    db.save_local(DB_FAISS_PATH)
-    llm = load_llm()
-    chain = ConversationalRetrievalChain.from_llm(llm=llm, retriever=db.as_retriever())
+    
+    # Extract variable names
+    variable_names = [col for col in data[0].keys()]
+    variable_info = "The CSV file contains the following variables: " + ", ".join(variable_names) + "."
+    
+    # Update initial chat history
+    if 'generated' not in st.session_state:
+        st.session_state['generated'] = ["Hello! Ask me anything about " + uploaded_file.name + " 🤗\n\n" + variable_info]
 
     def conversational_chat(query):
+        
+###################### NEW
+ # Extract variable names from the CSV data
+    variable_names = [col for col in data[0].keys()]
+    variable_info = "The CSV file contains the following variables: " + ", ".join(variable_names) + "."
+    
+    # Include variable information in the prompt
+    prompt = variable_info + "\n\nUser: " + query + "\nAI:"
+    
+    result = chain({"question": prompt, "chat_history": st.session_state['history']})
+    st.session_state['history'].append((query, result["answer"]))
+    return result["answer"]
+
+######################## NEW
+            
         result = chain({"question": query, "chat_history": st.session_state['history']})
         st.session_state['history'].append((query, result["answer"]))
         return result["answer"]
